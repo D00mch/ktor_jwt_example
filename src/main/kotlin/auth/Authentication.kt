@@ -1,13 +1,12 @@
 package dumch.com.auth
 
-import com.auth0.jwt.interfaces.DecodedJWT
-import com.auth0.jwt.interfaces.JWTVerifier
+import authentication.jwt.* // comment out this and uncomment the line below
+// import io.ktor.server.auth.jwt.* // and run the test again to see the default ktor jwt behavior
 import dumch.com.auth.Headers.AUTH_HEADER
 import io.ktor.http.*
 import io.ktor.http.auth.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import kotlinx.serialization.Serializable
@@ -57,79 +56,45 @@ private fun AuthenticationConfig.setupWebJwt(environment: ApplicationEnvironment
 
         validate { credential: JWTCredential ->
             val expectedClientId = /* get this from DB, Secret Manager, or whatever */ 1
-            val clientIdFromPayload = credential.payload.getClaim(JwtClaims.WEB_CLIENT_ID).asInt()
+            val clientIdClaim = credential.payload.getClaim(JwtClaims.WEB_CLIENT_ID)
+            if (clientIdClaim.isMissing) throw IllegalArgumentException("No web client id claim")
+            val clientIdFromPayload = clientIdClaim.asInt()
             if (expectedClientId != clientIdFromPayload) return@validate null
-            val scopes: MutableList<String> = credential.payload.getClaim(JwtClaims.SCOPES).asList(String::class.java)
-                ?: return@validate null
+            val scopes: List<String> = credential.payload.getClaim(JwtClaims.SCOPES).asList(String::class.java)
+                ?: throw Exception("No scopes")
             Principal.WebClient(clientIdFromPayload, scopes)
         }
 
-        challenge { _, _ ->
-            printErrors()
-            call.respondText(status = HttpStatusCode.Unauthorized) { "Authentication error, but what exactly?" }
-        }
+        defaultChallenge()
     }
 }
 
 private fun AuthenticationConfig.setupMobileJwt() {
     jwt(Clients.MOBILE_CLIENT) {
-        val spyVerifier = SpyJwtVerifier(webTokenVerifier())
-        authHeader { call ->
-            call.request.header(AUTH_HEADER)?.let { parseAuthorizationHeader(it) }
-        }
-        verifier { _ -> spyVerifier }
+        authHeader { call -> call.request.header(AUTH_HEADER)?.let { parseAuthorizationHeader(it) } }
+        verifier { _ -> webTokenVerifier() }
         validate { credential: JWTCredential ->
-            val os: String = credential.payload.getClaim(JwtClaims.OS).asString() ?: return@validate null
+            val os = credential.payload.getClaim(JwtClaims.OS).asString() ?: throw Exception("No os in scope")
             val scopes: MutableList<String> = credential.payload.getClaim(JwtClaims.SCOPES).asList(String::class.java)
                 ?: return@validate null
             Principal.MobileClient(os, scopes)
         }
-        challenge { _, _ ->
-            spyVerifier.exception?.let { e ->
-                call.application.log.error("Verification error")
-                call.respond(HttpStatusCode.Unauthorized, DetailedErrorResponse(e.toString()))
-                return@let
+        defaultChallenge()
+    }
+}
+
+private fun JWTAuthenticationProvider.Config.defaultChallenge() {
+    challenge { _, _ ->
+        val msg: String = call.authentication.allFailures.firstNotNullOf {
+            when (it) {
+                is AuthenticationFailedCause.Error -> it.message
+                is AuthenticationFailedCause.InvalidCredentials -> "Invalid credential"
+                is AuthenticationFailedCause.NoCredentials -> "No credentials"
             }
-            call.respond(
-                HttpStatusCode.Unauthorized,
-                DetailedErrorResponse(call.authentication.allFailures.first().toString())
-            )
         }
+        call.respond(status = HttpStatusCode.Unauthorized, DetailedErrorResponse(msg))
     }
 }
 
 @Serializable
-class DetailedErrorResponse(val message: String?)
-
-/**
- * All we can get from this block is
- * 1. No creds
- * 2. Bad creds
- *
- * But no reasons what's really wrong
- */
-private fun JWTChallengeContext.printErrors() {
-    val failures: List<AuthenticationFailedCause> = call.authentication.allFailures
-    val errors: List<AuthenticationFailedCause.Error> = call.authentication.allErrors
-    failures.forEach { call.application.log.error("failure: $it") }
-    errors.forEach { call.application.log.error("error: $it") }
-}
-
-class SpyJwtVerifier(private val delegate: JWTVerifier) : JWTVerifier {
-    var exception: Exception? = null
-        private set
-
-    override fun verify(token: String?): DecodedJWT = try {
-        delegate.verify(token)
-    } catch (e: Exception) {
-        exception = e
-        throw e
-    }
-
-    override fun verify(jwt: DecodedJWT?): DecodedJWT = try {
-        delegate.verify(jwt)
-    } catch (e: Exception) {
-        exception = e
-        throw e
-    }
-}
+class DetailedErrorResponse(val message: String?, val ok: Boolean = false)

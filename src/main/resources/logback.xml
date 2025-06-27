@@ -17,7 +17,7 @@
             <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n%ex{3}</pattern>
         </encoder>
     </appender>
-    <logger name="io.ktor.auth.jwt" level="TRACE" additivity="false">
+    <logger name="auth.jwt" level="TRACE" additivity="false">
         <appender-ref ref="STDOUT_SHORT"/>
     </logger>
 </configuration>

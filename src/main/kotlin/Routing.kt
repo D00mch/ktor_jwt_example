@@ -15,14 +15,15 @@ import kotlinx.serialization.json.Json
 
 object Routes {
     const val STATUS = "status"
+    const val STATUS_MOB_FIRST = "status_mob_first"
     const val ANDROID_ONLY = "android_only"
 }
 
 fun Application.configureRouting() {
     routing {
         authenticate(
-            Clients.MOBILE_CLIENT,
             Clients.WEB_CLIENT,
+            Clients.MOBILE_CLIENT,
             strategy = AuthenticationStrategy.FirstSuccessful
         ) {
             get(Routes.STATUS) {
@@ -30,7 +31,17 @@ fun Application.configureRouting() {
             }
         }
 
-        authenticate(Clients.MOBILE_CLIENT, strategy = AuthenticationStrategy.Required) {
+        authenticate(
+            Clients.MOBILE_CLIENT,
+            Clients.WEB_CLIENT,
+            strategy = AuthenticationStrategy.FirstSuccessful
+        ) {
+            get(Routes.STATUS_MOB_FIRST) {
+                call.respond(ResponseStatus("OK"))
+            }
+        }
+
+        authenticate(Clients.MOBILE_CLIENT) {
             get(Routes.ANDROID_ONLY) {
                 val client = requireNotNull(call.principal<Principal.MobileClient>())
                 if (client.os.equals("ios", ignoreCase = true)) {
@@ -38,6 +49,21 @@ fun Application.configureRouting() {
                     return@get
                 }
                 call.respond(ResponseStatus("OK"))
+            }
+        }
+
+        // the below code is only for demonstration, don't copy
+        authenticate(
+            Clients.WEB_CLIENT,
+            strategy = AuthenticationStrategy.FirstSuccessful
+        ) {
+            authenticate(Clients.MOBILE_CLIENT, strategy = AuthenticationStrategy.Required) {
+                get("deepthroat") {
+                    val mob = call.principal<Principal.MobileClient>()
+                    val web = call.principal<Principal.WebClient>()
+                    println("$mob.$web")
+                    call.respond(ResponseStatus("OK"))
+                }
             }
         }
     }
@@ -58,7 +84,7 @@ fun Application.configureJson() {
     install(ContentNegotiation) {
         json(Json {
             prettyPrint = true
-            isLenient = true
+            encodeDefaults = true
         })
     }
 }

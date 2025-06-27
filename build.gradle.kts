@@ -33,13 +33,18 @@ tasks.test {
     }
 }
 
-
 dependencies {
     implementation("io.ktor:ktor-server-core:$ktor_version")
     implementation("io.ktor:ktor-server-core-jvm:$ktor_version")
     implementation("io.ktor:ktor-server-netty:$ktor_version")
     implementation("io.ktor:ktor-server-config-yaml:$ktor_version")
     implementation("io.ktor:ktor-server-auth-jwt:$ktor_version")
+
+    // you can get rid on the ktor-server-auth-jwt and import only the necessary dependencies
+    // implementation("io.ktor:ktor-server-auth:$ktor_version")
+    // implementation("com.auth0:java-jwt:4.5.0")
+    // implementation("com.auth0:jwks-rsa:0.22.2")
+
     implementation("io.ktor:ktor-server-status-pages:$ktor_version")
     implementation("io.ktor:ktor-server-content-negotiation:$ktor_version")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktor_version")
