@@ -1,5 +1,7 @@
 # ktor_jwt_example
 
+Tutorial in Russian ([habr](https://habr.com/ru/articles/921076/)).
+       
 ## Run tests
 
 ```bash
